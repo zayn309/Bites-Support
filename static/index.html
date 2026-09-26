@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bites Support</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --night: #1A1410;
+    --night-soft: #241C16;
+    --cream: #F2E8DC;
+    --cream-dim: #C9BDAE;
+    --saffron: #E8A33D;
+    --saffron-dim: #8A6528;
+    --herb: #3E7B5E;
+    --herb-bright: #4E9873;
+    --paprika: #C24A3D;
+    --line: rgba(242, 232, 220, 0.1);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--night);
+    color: var(--cream);
+    font-family: 'Inter', system-ui, sans-serif;
+    display: flex;
+    justify-content: center;
+    padding: 32px 16px;
+  }
+
+  .app {
+    width: 100%;
+    max-width: 640px;
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 64px);
+    min-height: 480px;
+  }
+
+  header {
+    position: relative;
+    background: linear-gradient(135deg, #2A2015 0%, #1A1410 70%);
+    border: 1px solid var(--line);
+    border-radius: 16px 16px 0 0;
+    padding: 20px 24px;
+    overflow: visible;
+  }
+
+  header .glow {
+    position: absolute;
+    top: -60px;
+    right: -40px;
+    width: 180px;
+    height: 180px;
+    background: radial-gradient(circle, rgba(232,163,61,0.18) 0%, transparent 70%);
+    pointer-events: none;
+    border-radius: 16px 16px 0 0;
+    overflow: hidden;
+  }
+
+  .header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    position: relative;
+    gap: 8px;
+  }
+
+  .brand-row {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+
+  .brand {
+    font-family: 'Fraunces', serif;
+    font-size: 26px;
+    font-weight: 600;
+    color: var(--saffron);
+    letter-spacing: -0.01em;
+  }
+
+  .brand-sub {
+    font-size: 13px;
+    color: var(--cream-dim);
+  }
+
+  .header-actions {
+    display: flex;
+    gap: 8px;
+    position: relative;
+  }
+
+  .header-actions button {
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--cream-dim);
+    border-radius: 8px;
+    padding: 7px 12px;
+    font-size: 12.5px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+    white-space: nowrap;
+  }
+
+  .header-actions button:hover {
+    border-color: var(--saffron-dim);
+    color: var(--saffron);
+  }
+
+  #chats-dropdown {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: 260px;
+    max-height: 320px;
+    overflow-y: auto;
+    background: #241C16;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 6px;
+    display: none;
+    z-index: 20;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.4);
+  }
+
+  #chats-dropdown.open { display: block; }
+
+  .chat-item {
+    padding: 10px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--cream-dim);
+    transition: background 0.12s;
+  }
+
+  .chat-item:hover { background: rgba(242,232,220,0.06); }
+  .chat-item.active { background: rgba(232,163,61,0.12); color: var(--saffron); }
+
+  .chat-item .preview {
+    color: var(--cream);
+    font-weight: 500;
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .chat-item.active .preview { color: var(--saffron); }
+
+  .chat-item .time { font-size: 11px; opacity: 0.7; }
+
+  #chats-empty {
+    padding: 16px 12px;
+    font-size: 12.5px;
+    color: var(--cream-dim);
+    text-align: center;
+  }
+
+  .status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    font-size: 12.5px;
+    color: var(--cream-dim);
+    position: relative;
+  }
+
+  .status .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--herb-bright);
+    box-shadow: 0 0 0 0 rgba(78,152,115,0.6);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(78,152,115,0.5); }
+    70%  { box-shadow: 0 0 0 6px rgba(78,152,115,0); }
+    100% { box-shadow: 0 0 0 0 rgba(78,152,115,0); }
+  }
+
+  #chat {
+    flex: 1;
+    background: var(--night-soft);
+    border-left: 1px solid var(--line);
+    border-right: 1px solid var(--line);
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  #chat::-webkit-scrollbar { width: 8px; }
+  #chat::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+
+  .row {
+    display: flex;
+    max-width: 82%;
+  }
+
+  .row.user { align-self: flex-end; }
+  .row.bot { align-self: flex-start; }
+
+  .bubble {
+    padding: 11px 15px;
+    border-radius: 14px;
+    font-size: 14.5px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+
+  .row.user .bubble {
+    background: var(--herb);
+    color: #EFF7F2;
+    border-bottom-right-radius: 4px;
+  }
+
+  .row.bot .bubble {
+    background: #2D251C;
+    border: 1px solid var(--line);
+    color: var(--cream);
+    border-bottom-left-radius: 4px;
+  }
+
+  .row[dir="rtl"] .bubble { text-align: right; }
+
+  .typing {
+    display: flex;
+    gap: 4px;
+    padding: 13px 15px;
+  }
+
+  .typing span {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--cream-dim);
+    animation: bounce 1.2s infinite;
+  }
+
+  .typing span:nth-child(2) { animation-delay: 0.15s; }
+  .typing span:nth-child(3) { animation-delay: 0.3s; }
+
+  @keyframes bounce {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
+    30% { transform: translateY(-4px); opacity: 1; }
+  }
+
+  #empty-state {
+    margin: auto;
+    text-align: center;
+    color: var(--cream-dim);
+    font-size: 13.5px;
+    max-width: 280px;
+    line-height: 1.6;
+  }
+
+  #empty-state .icon { font-size: 28px; margin-bottom: 8px; }
+
+  footer {
+    background: var(--night-soft);
+    border: 1px solid var(--line);
+    border-radius: 0 0 16px 16px;
+    padding: 14px;
+    display: flex;
+    gap: 10px;
+  }
+
+  #input {
+    flex: 1;
+    background: var(--night);
+    border: 1px solid var(--line);
+    color: var(--cream);
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 14.5px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  #input:focus { border-color: var(--saffron-dim); }
+  #input::placeholder { color: var(--cream-dim); }
+
+  #send {
+    background: var(--saffron);
+    color: #1A1410;
+    border: none;
+    border-radius: 10px;
+    padding: 0 20px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+  }
+
+  #send:hover { background: #F0B155; }
+  #send:active { transform: scale(0.97); }
+  #send:disabled { opacity: 0.5; cursor: default; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .status .dot, .typing span { animation: none; }
+  }
+</style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="glow"></div>
+      <div class="header-top">
+        <div class="brand-row">
+          <span class="brand">Bites</span>
+          <span class="brand-sub">Support</span>
+        </div>
+        <div class="header-actions">
+          <button id="chats-toggle" title="View past conversations">Chats</button>
+          <button id="new-chat" title="Start a fresh conversation">New chat</button>
+          <div id="chats-dropdown"></div>
+        </div>
+      </div>
+      <div class="status"><span class="dot"></span> Here to help, day or night</div>
+    </header>
+
+    <div id="chat">
+      <div id="empty-state">
+        <div class="icon">🛵</div>
+        Ask about an order, a refund, or anything about how Bites works.<br>
+        اسأل عن أوردر أو استرداد فلوس أو أي حاجة عايز تعرفها.
+      </div>
+    </div>
+
+    <footer>
+      <input id="input" placeholder="Type your message... اكتب هنا" autocomplete="off" />
+      <button id="send">Send</button>
+    </footer>
+  </div>
+
+<script>
+const SESSIONS_KEY = "bites_sessions";       // array of {id, label, updatedAt}
+const CURRENT_KEY = "bites_session_id";
+
+let sessionId = localStorage.getItem(CURRENT_KEY);
+const chat = document.getElementById("chat");
+const input = document.getElementById("input");
+const sendBtn = document.getElementById("send");
+const newChatBtn = document.getElementById("new-chat");
+const chatsToggle = document.getElementById("chats-toggle");
+const chatsDropdown = document.getElementById("chats-dropdown");
+let typingEl = null;
+
+function isRTL(text) {
+  return /[\u0600-\u06FF]/.test(text);
+}
+
+function getSessions() {
+  try {
+    return JSON.parse(localStorage.getItem(SESSIONS_KEY)) || [];
+  } catch {
+    return [];
+  }
+}
+
+function saveSessions(sessions) {
+  localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions));
+}
+
+function upsertSession(id, firstMessageText) {
+  const sessions = getSessions();
+  const existing = sessions.find(s => s.id === id);
+  const now = Date.now();
+
+  if (existing) {
+    existing.updatedAt = now;
+  } else {
+    const label = firstMessageText.length > 42
+      ? firstMessageText.slice(0, 42) + "…"
+      : firstMessageText;
+    sessions.unshift({ id, label, updatedAt: now });
+  }
+  saveSessions(sessions);
+}
+
+function renderChatsDropdown() {
+  const sessions = getSessions().sort((a, b) => b.updatedAt - a.updatedAt);
+  chatsDropdown.innerHTML = "";
+
+  if (sessions.length === 0) {
+    chatsDropdown.innerHTML = '<div id="chats-empty">No past conversations yet.</div>';
+    return;
+  }
+
+  sessions.forEach(s => {
+    const item = document.createElement("div");
+    item.className = "chat-item" + (s.id === sessionId ? " active" : "");
+    const time = new Date(s.updatedAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    item.innerHTML = `<div class="preview">${s.label}</div><div class="time">${time}</div>`;
+    item.addEventListener("click", () => switchSession(s.id));
+    chatsDropdown.appendChild(item);
+  });
+}
+
+function clearEmptyState() {
+  const empty = document.getElementById("empty-state");
+  if (empty) empty.remove();
+}
+
+function showEmptyState() {
+  chat.innerHTML = `
+    <div id="empty-state">
+      <div class="icon">🛵</div>
+      Ask about an order, a refund, or anything about how Bites works.<br>
+      اسأل عن أوردر أو استرداد فلوس أو أي حاجة عايز تعرفها.
+    </div>`;
+}
+
+function addMsg(text, sender) {
+  clearEmptyState();
+  const row = document.createElement("div");
+  row.className = "row " + sender;
+  if (isRTL(text)) row.dir = "rtl";
+
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+  bubble.textContent = text;
+
+  row.appendChild(bubble);
+  chat.appendChild(row);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+async function loadHistory(id) {
+  if (!id) return;
+  try {
+    const res = await fetch(`/history/${id}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.messages && data.messages.length > 0) {
+      data.messages.forEach(m => addMsg(m.content, m.role));
+    }
+  } catch (err) {
+    console.warn("Could not load history:", err);
+  }
+}
+
+function switchSession(id) {
+  sessionId = id;
+  localStorage.setItem(CURRENT_KEY, id);
+  showEmptyState();
+  loadHistory(id);
+  chatsDropdown.classList.remove("open");
+  renderChatsDropdown();
+  input.focus();
+}
+
+function showTyping() {
+  typingEl = document.createElement("div");
+  typingEl.className = "row bot";
+  typingEl.innerHTML = '<div class="bubble typing"><span></span><span></span><span></span></div>';
+  chat.appendChild(typingEl);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function hideTyping() {
+  if (typingEl) { typingEl.remove(); typingEl = null; }
+}
+
+async function send() {
+  const text = input.value.trim();
+  if (!text) return;
+
+  const isFirstMessageOfSession = !sessionId;
+  addMsg(text, "user");
+  input.value = "";
+  sendBtn.disabled = true;
+  showTyping();
+
+  try {
+    const res = await fetch("/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        session_id: sessionId,
+        message: text
+      })
+    });
+    const data = await res.json();
+    sessionId = data.session_id;
+    localStorage.setItem(CURRENT_KEY, sessionId);
+    upsertSession(sessionId, isFirstMessageOfSession ? text : (getSessions().find(s => s.id === sessionId)?.label || text));
+    hideTyping();
+    addMsg(data.reply, "bot");
+  } catch (err) {
+    hideTyping();
+    addMsg("Connection issue — please try again.", "bot");
+  } finally {
+    sendBtn.disabled = false;
+    input.focus();
+  }
+}
+
+function startNewChat() {
+  sessionId = null;
+  localStorage.removeItem(CURRENT_KEY);
+  showEmptyState();
+  chatsDropdown.classList.remove("open");
+  input.focus();
+}
+
+sendBtn.addEventListener("click", send);
+newChatBtn.addEventListener("click", startNewChat);
+chatsToggle.addEventListener("click", () => {
+  renderChatsDropdown();
+  chatsDropdown.classList.toggle("open");
+});
+document.addEventListener("click", (e) => {
+  if (!chatsDropdown.contains(e.target) && e.target !== chatsToggle) {
+    chatsDropdown.classList.remove("open");
+  }
+});
+input.addEventListener("keydown", e => { if (e.key === "Enter") send(); });
+
+loadHistory(sessionId);
+input.focus();
+</script>
+</body>
+</html>

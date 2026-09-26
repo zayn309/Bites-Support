@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Bites Support — Approvals</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --night: #1A1410; --night-soft: #241C16; --cream: #F2E8DC;
+    --cream-dim: #C9BDAE; --saffron: #E8A33D; --herb: #3E7B5E;
+    --paprika: #C24A3D; --line: rgba(242,232,220,0.1);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--night); color: var(--cream);
+    font-family: 'Inter', sans-serif; padding: 40px 20px;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; }
+  h1 { font-family: 'Fraunces', serif; color: var(--saffron); font-size: 24px; margin-bottom: 4px; }
+  .sub { color: var(--cream-dim); font-size: 13.5px; margin-bottom: 28px; }
+  .card {
+    background: var(--night-soft); border: 1px solid var(--line);
+    border-radius: 12px; padding: 18px 20px; margin-bottom: 12px;
+    display: flex; justify-content: space-between; align-items: center; gap: 16px;
+  }
+  .info div:first-child { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  .info div.meta { font-size: 13px; color: var(--cream-dim); }
+  .amount { color: var(--saffron); font-weight: 600; }
+  .actions { display: flex; gap: 8px; }
+  button {
+    border: none; border-radius: 8px; padding: 9px 16px;
+    font-size: 13.5px; font-weight: 600; cursor: pointer; font-family: inherit;
+  }
+  .approve { background: var(--herb); color: #EFF7F2; }
+  .reject { background: transparent; color: var(--paprika); border: 1px solid var(--paprika); }
+  #empty { text-align: center; color: var(--cream-dim); padding: 60px 0; font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Pending Approvals</h1>
+  <div class="sub">Refunds above 200 EGP wait here for review.</div>
+  <div id="list"></div>
+</div>
+
+<script>
+async function load() {
+  const res = await fetch("/admin/pending");
+  const data = await res.json();
+  const list = document.getElementById("list");
+  list.innerHTML = "";
+
+  if (data.pending.length === 0) {
+    list.innerHTML = '<div id="empty">Nothing pending right now.</div>';
+    return;
+  }
+
+  data.pending.forEach(a => {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `
+      <div class="info">
+        <div>Order ${a.order_id} — <span class="amount">${a.amount_egp} EGP</span></div>
+        <div class="meta">${a.reason || "No reason given"} · ${new Date(a.created_at).toLocaleString()}</div>
+      </div>
+      <div class="actions">
+        <button class="approve" onclick="act('${a.id}', 'approve')">Approve</button>
+        <button class="reject" onclick="act('${a.id}', 'reject')">Reject</button>
+      </div>`;
+    list.appendChild(card);
+  });
+}
+
+async function act(id, action) {
+  await fetch(`/admin/${action}/${id}`, { method: "POST" });
+  load();
+}
+
+load();
+setInterval(load, 5000); // poll for new approvals
+</script>
+</body>
+</html>

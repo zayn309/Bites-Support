@@ -1,0 +1,135 @@
+# Bites Support
+
+A multi-agent, bilingual (Arabic/English) customer support assistant for a food delivery app, built with LangGraph, LangChain, and RAG. It routes customer messages to specialist agents for order tracking, billing/refunds, and policy questions — with a real human-in-the-loop approval flow for high-value refunds.
+
+Built as a focused project to demonstrate the tools and architecture used in modern agentic AI systems: LangGraph, LangChain, tool-calling agents, RAG with a vector store, and multi-agent orchestration.
+
+## What it does
+
+A customer can ask, in Arabic (including Egyptian dialect) or English:
+- **"فين الأوردر بتاعي رقم 1001؟"** → tracked via a live order-status tool
+- **"my order is 40 minutes late, refund me"** → checked against real policy, then refunded automatically (small amounts) or queued for manager approval (large amounts)
+- **"can I combine a promo code with free delivery?"** → answered from a real FAQ knowledge base via RAG, not the model's general knowledge
+
+## Architecture
+
+```
+                    ┌──────────────┐
+   User message ───▶│  Supervisor  │── classifies intent using recent context
+                    └──────┬───────┘
+                           │
+              ┌────────────┼────────────┐
+              ▼            ▼            ▼
+        ┌──────────┐ ┌──────────┐ ┌──────────┐
+        │  Order   │ │ Billing  │ │   FAQ    │
+        │  Agent   │ │  Agent   │ │  Agent   │
+        └────┬─────┘ └────┬─────┘ └────┬─────┘
+             │            │            │
+     get_order_status  issue_refund  search_faq
+     list_customer_    get_order_    (Chroma RAG)
+        orders          status
+     search_faq       search_faq
+```
+
+This is a hand-wired **LangGraph `StateGraph`**, not a single agent with every tool bolted on. The supervisor is a lightweight classification call (not a full tool-calling agent — no tools needed for routing), and each specialist is a separate `create_agent` instance scoped to only the tools relevant to its job. Every specialist also has access to `search_faq`, since policy questions come up naturally inside order and billing conversations, not just in dedicated FAQ threads.
+
+Conversation memory is handled by a **LangGraph SQLite checkpointer**, keyed by a `thread_id` (the chat session ID) — conversations survive a server restart, not just an in-memory dict that resets on every deploy.
+
+## Tech stack
+
+| Piece | Tool | Why |
+|---|---|---|
+| Agent orchestration | LangGraph + LangChain (`create_agent`) | Matches the target stack directly |
+| LLM | Groq (`openai/gpt-oss-120b`) | Free tier, fast inference, swappable via a one-file provider abstraction (`app/llm.py`) — OpenAI, Gemini, or local Ollama models work by changing one env var |
+| Vector store | Chroma | Local, free, persistent |
+| Embeddings | `intfloat/multilingual-e5-small` (local, via `sentence-transformers`) | Handles Arabic + English without an API call |
+| Backend | FastAPI | REST endpoint + static file serving |
+| Persistence | SQLite (LangGraph checkpointer + a separate approvals table) | Zero-infra, file-based, swappable for Postgres later |
+| Frontend | Vanilla HTML/JS, no framework | Kept dependency-free; session history, session switching, and a live typing indicator, all in one file |
+
+## Design decisions and trade-offs
+
+A few choices are worth calling out explicitly, since they were deliberate rather than defaults:
+
+**Human-in-the-loop via an approval queue, not LangGraph's native `interrupt()`.** Each specialist is invoked as an independent nested `create_agent` call inside its graph node, rather than composed as a true LangGraph subgraph sharing one checkpointed execution tree. `interrupt()` needs the whole run to share that single checkpoint, which this architecture doesn't have. Instead, refunds above 200 EGP write a pending row to a small SQLite `approvals` table; a separate admin page (`/admin.html`) lists and resolves them. This is a legitimate, commonly used pattern in production systems — an action creates a pending record instead of executing immediately, and a human reviews it out of band.
+
+**Tool-call messages are stripped before handing off between specialists.** Different specialists are bound to different tool sets (billing only has `issue_refund`/`get_order_status`/`search_faq`, for example). Passing the *raw* conversation history — including another specialist's tool-call messages — across a handoff caused the LLM provider to reject the request outright, since it validates that every tool call in the message history matches a tool available in that specific call. A `clean_history()` helper strips tool-call scaffolding before each handoff, keeping only human-readable turns shared across specialists.
+
+**Tool docstrings are treated as part of the prompt, not just documentation.** A real bug during development: `get_order_status`'s docstring said "status, items, driver and delay" but never mentioned price — even though the function returned it. The model correctly concluded from the docstring that it couldn't look up prices, and told a customer it didn't have access to data it actually had. Every tool's docstring was audited to describe everything the function actually returns.
+
+**Mock data, not a live database.** A full SQLite schema (customers/orders tables, computed lateness from real timestamps, context-based customer identity instead of an LLM-supplied ID) was built and tested end-to-end during development, then deliberately rolled back in favor of the original in-memory mock data. It didn't change what the demo shows, and added real surface area for something to break. The `OrderRepo` class is still a clean abstraction specifically so this swap is a contained change — only that one class's internals would need to change, not the tools or agents that call it.
+
+**Customer identity, if implemented for real, should never be an LLM-supplied tool argument.** This came up directly while building the (since-reverted) real-DB version: if a tool like "list my orders" takes a customer ID as a parameter the model fills in from conversation text, a confused or manipulated model could pass the wrong ID and leak another customer's data. The correct pattern — validated during that detour, worth keeping in mind for a real implementation — is to derive identity from authenticated session context, never from text the model generates.
+
+**Session identity is a bearer token today, with no authentication layer.** The chat session ID is a UUID stored in the browser's `localStorage`; possessing it is sufficient to resume that conversation. Fine for a demo with no real user data, but a production version would tie sessions to authenticated users and prefer an httpOnly cookie over `localStorage` to resist token theft via XSS.
+
+## Evals
+
+`evals/run_evals.py` runs a fixed set of representative messages through the graph and checks, per case:
+1. Did the supervisor route to the correct specialist?
+2. Did the expected tool actually fire? (captured live from the existing application logs, not re-instrumented)
+3. For the approval-queue case, did a real row land in the approvals database — not just "did the reply contain certain words," which turned out to be a fragile signal since models phrase the same outcome many different ways.
+
+One test case deliberately checks that a refund request *gets denied* when the order doesn't meet the policy threshold — the agent correctly refusing an ineligible refund request is a feature, not a failure, and it's worth having a test that would catch a regression toward blindly approving whatever a customer asks for.
+
+Run with:
+```bash
+python -m evals.run_evals
+```
+
+## Running it locally
+
+```bash
+# 1. Set up the environment
+python -m venv .venv
+source .venv/bin/activate    # Windows: .venv\Scripts\activate
+pip install -r requirements.txt   # or the individual packages listed below
+
+# 2. Add your API key
+echo "LLM_PROVIDER=groq" >> .env
+echo "GROQ_API_KEY=your_key_here" >> .env
+
+# 3. Build the FAQ vector index (first run only, or after editing data/faq/*.md)
+python -m app.ingest --force
+
+# 4. Run the server
+uvicorn app.main:app
+
+# 5. Open the chat
+# http://localhost:8000        -> customer chat
+# http://localhost:8000/admin.html -> pending refund approvals
+```
+
+**Packages used:** `langgraph`, `langchain`, `langchain-openai`, `langchain-groq`, `langchain-chroma`, `chromadb`, `langchain-huggingface`, `sentence-transformers`, `langgraph-checkpoint-sqlite`, `fastapi`, `uvicorn`, `python-dotenv`.
+
+**Swapping the LLM provider:** change `LLM_PROVIDER` in `.env` to `openai`, `gemini`, or `ollama` — see `app/llm.py`.
+
+## Project structure
+
+```
+support-agent/
+├── app/
+│   ├── graph.py          # the LangGraph StateGraph: supervisor + 3 specialists
+│   ├── tools.py          # order/billing tools + mock OrderRepo
+│   ├── rag.py            # Chroma retriever + search_faq tool
+│   ├── ingest.py         # builds/rebuilds the FAQ vector index
+│   ├── approvals.py      # SQLite-backed refund approval queue
+│   ├── llm.py            # swappable LLM provider (Groq/OpenAI/Gemini/Ollama)
+│   ├── prompts.py        # all system prompts, versioned as config
+│   ├── logging_config.py
+│   └── main.py           # FastAPI app: /chat, /history, /admin/*
+├── data/faq/*.md          # policy content indexed for RAG
+├── evals/run_evals.py     # routing + tool-use + side-effect checks
+├── static/
+│   ├── index.html         # customer chat UI
+│   └── admin.html         # refund approval review page
+└── checkpoints.sqlite, approvals.db, chroma_db/   # generated, gitignored
+```
+
+## What I'd do with more time
+
+- **Real persistence for order data** — a normalized SQLite schema (customers/orders, computed lateness from real timestamps) was already built and tested during development; reintroducing it cleanly, with identity derived from auth rather than conversation text, is the natural next step.
+- **LangGraph's native `interrupt()`** for approvals, if the specialists were restructured as true composed subgraphs sharing one checkpoint, instead of the current approval-queue pattern.
+- **Authentication and per-user session scoping**, replacing the current bearer-token-style session ID.
+- **An Arabic-specialized embedding model** (e.g., research models trained specifically on dialectal Arabic) in place of the general multilingual embedding model currently used — the FAQ content is retrieved correctly today, but a general multilingual model likely underperforms a specialized one on nuanced Egyptian dialect queries specifically.
+- **Postgres instead of SQLite** for the checkpointer and approvals store, for real concurrent-write safety at scale.
