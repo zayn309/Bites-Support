@@ -4,7 +4,7 @@ A multi-agent, bilingual (Arabic/English) customer support assistant for a food 
 
 Built as a focused project to demonstrate the tools and architecture used in modern agentic AI systems: LangGraph, LangChain, tool-calling agents, RAG with a vector store, and multi-agent orchestration.
 
-## What it does?
+## What it does
 
 A customer can ask, in Arabic (including Egyptian dialect) or English:
 - **"فين الأوردر بتاعي رقم 1001؟"** → tracked via a live order-status tool
